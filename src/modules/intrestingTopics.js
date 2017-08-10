@@ -10,106 +10,106 @@ var conn_intresting_topics = conn_pg_catalog_urls.model('intresting_topics', sch
 var topics = {
     interests: [{
             "id": 1,
-            "name": "cricket",
+            "name": "Cricket",
             "picture": "http://images.indianexpress.com/2016/05/virat1.jpg"
         },
         {
             "id": 2,
-            "name": "hockey",
-            "picture": "http://images.indianexpress.com/2016/05/virat1.jpg"
+            "name": "Hockey",
+            "picture": "http://www.smartcc365.com/data/out/84/1052610.jpg"
         },
         {
             "id": 3,
-            "name": "tennis",
+            "name": "Tennis",
             "picture": "http://images.indianexpress.com/2016/05/virat1.jpg"
         },
         {
             "id": 4,
-            "name": "chess",
+            "name": "Chess",
             "picture": "http://images.indianexpress.com/2016/05/virat1.jpg"
         },
         {
             "id": 5,
-            "name": "places",
+            "name": "Places",
             "picture": "http://images.indianexpress.com/2016/05/virat1.jpg"
         },
         {
             "id": 6,
-            "name": "football",
+            "name": "Football",
             "picture": "http://images.indianexpress.com/2016/05/virat1.jpg"
         },
         {
             "id": 7,
-            "name": "movie",
+            "name": "Movie",
             "picture": "http://images.indianexpress.com/2016/05/virat1.jpg"
         },
         {
             "id": 8,
-            "name": "songs",
+            "name": "Songs",
             "picture": "http://images.indianexpress.com/2016/05/virat1.jpg"
         },
         {
             "id": 9,
-            "name": "video",
+            "name": "Video",
             "picture": "http://images.indianexpress.com/2016/05/virat1.jpg"
         },
         {
             "id": 8,
-            "name": "reading",
+            "name": "Reading",
             "picture": "http://images.indianexpress.com/2016/05/virat1.jpg"
         },
         {
             "id": 10,
-            "name": "cooking",
+            "name": "Cooking",
             "picture": "http://images.indianexpress.com/2016/05/virat1.jpg"
         },
         {
             "id": 11,
-            "name": "dancing",
+            "name": "Dancing",
             "picture": "http://images.indianexpress.com/2016/05/virat1.jpg"
         },
         {
             "id": 12,
-            "name": "drama",
+            "name": "Drama",
             "picture": "http://images.indianexpress.com/2016/05/virat1.jpg"
         },
         {
             "id": 13,
-            "name": "fashion",
+            "name": "Fashion",
             "picture": "http://images.indianexpress.com/2016/05/virat1.jpg"
         },
         {
             "id": 14,
-            "name": "panting",
+            "name": "Panting",
             "picture": "http://images.indianexpress.com/2016/05/virat1.jpg"
         }, {
             "id": 15,
-            "name": "singing",
+            "name": "Singing",
             "picture": "http://images.indianexpress.com/2016/05/virat1.jpg"
         },
         {
             "id": 16,
-            "name": "puzzles",
+            "name": "Puzzles",
             "picture": "http://images.indianexpress.com/2016/05/virat1.jpg"
         },
         {
             "id": 17,
-            "name": "sketching",
+            "name": "Sketching",
             "picture": "http://images.indianexpress.com/2016/05/virat1.jpg"
         },
         {
             "id": 18,
-            "name": "writing",
+            "name": "Writing",
             "picture": "http://images.indianexpress.com/2016/05/virat1.jpg"
         },
         {
             "id": 19,
-            "name": "driving",
+            "name": "Driving",
             "picture": "http://images.indianexpress.com/2016/05/virat1.jpg"
         },
         {
             "id": 20,
-            "name": "rock Climbing",
+            "name": "Rock Climbing",
             "picture": "http://images.indianexpress.com/2016/05/virat1.jpg"
         }
     ]

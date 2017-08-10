@@ -38,5 +38,8 @@ export default (app) => {
     /* Route for logout */
     app.route("/user/getOtherUsers").post(user.getOtherUsers);
 
+    /* Route for change Mobile */
+    app.route("/user/changeMobile").post(user.changeMobile);
+
     return app;
 };

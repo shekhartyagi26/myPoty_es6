@@ -21,9 +21,9 @@ module.exports = {
                 html: html
             }, (error, response) => {
                 if (error) {
-                    reject("messsage not send successfully");
+                    reject("Email not send successfully");
                 } else {
-                    resolve({ message: "messsage send successfully" });
+                    resolve({ message: "Email send successfully" });
                 }
                 mailer.close();
             });

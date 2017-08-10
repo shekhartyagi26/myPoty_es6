@@ -4,7 +4,7 @@ import User from "../models/User.js";
 import generatePassword from 'password-generator';
 import crypto from 'crypto';
 import config from "../../config.json";
-import { getSuccess, notFoundError, serverError, getSuccessMessage, validateEmail, successResponse, mergeArray } from "../modules/generic";
+import { getSuccess, notFoundError, serverError, getSuccessMessage, validateEmail, successResponse, mergeArray, countryCode, generateRandomString } from "../modules/generic";
 import { SUCCESS, ERROR } from "../modules/constant";
 import twilio from "../modules/twilio";
 import mail from "../modules/mail";
@@ -13,6 +13,7 @@ import jwt from "jwt-simple";
 import { encodeToken } from "../modules/token";
 import token from "../modules/token";
 import async from "async";
+import _ from "lodash";
 
 export class UserController extends BaseAPIController {
 
@@ -66,6 +67,7 @@ export class UserController extends BaseAPIController {
 
     signUp = (req, res) => {
         var body = req.body;
+        console.log(body)
         var user_details = body.user;
         let UserModel = req.User;
         if (!user_details) {
@@ -73,9 +75,11 @@ export class UserController extends BaseAPIController {
             res.json(successResponse(ERROR, {}, 'Some parameter missing.'));
             return;
         }
+
         let data = {};
         let { mobile, email, password, country_code } = body.user;
-        if (mobile && password) {
+        if (mobile && password && country_code) {
+            country_code = countryCode(country_code);
             data = { mobile: mobile }
         } else if (email && password) {
             data = { email: email }
@@ -90,6 +94,7 @@ export class UserController extends BaseAPIController {
                     res.status(ERROR)
                     res.json(successResponse(ERROR, {}, 'User already exist.'));
                 } else {
+                     console.log('11111111')
                     let md5 = crypto.createHash('md5');
                     md5.update(password);
                     let pass_md5 = md5.digest('hex');
@@ -103,13 +108,14 @@ export class UserController extends BaseAPIController {
                     user_details.status = 1;
                     User.save(UserModel, user_details)
                         .then((userData) => {
-                            // let verification_code = Math.ceil(Math.random() * 10000);
-
+                             console.log('22222222222')
+                            // let verification_code = generateRandomString();
                             let verification_code = 123456;
                             let updatedData = { verification_code: verification_code }
                             updatedData.access_token = encodeToken(userData._id);
                             if (mobile) {
-                                twilio.sendMessageTwilio(`your Mypoty verification code is: ${verification_code}`, '+918126724591')
+                                 console.log('44444444444')
+                                twilio.sendMessageTwilio(`Please enter this verification code to verify: ${verification_code}`, country_code + mobile)
                                     .then((result) => {
                                         User.update(UserModel, data, updatedData)
                                             .then((data) => {
@@ -117,19 +123,21 @@ export class UserController extends BaseAPIController {
                                                 res.json(successResponse(SUCCESS, { access_token: updatedData.access_token, status: 1, mobile: mobile }, 'An OTP has been sent,please verify.'));
                                             }).catch((e) => {
                                                 res.status(ERROR);
-                                                res.json(successResponse(ERROR, e, 'Error.'));
+                                                res.json(successResponse(ERROR, e, "Something Went Wrong."));
                                             })
                                     }).catch((e) => {
+                                        userData.remove();
                                         res.status(ERROR);
-                                        res.json(successResponse(ERROR, e, 'Error.'));
+                                        res.json(successResponse(ERROR, e, 'You have entered a invalid Mobile Number.'));
                                     })
                             } else {
+                                console.log('33333333333')
                                 mail.sendMail(email, constant().nodeMailer.subject, constant().nodeMailer.text, config.nodeMailer_email, constant().nodeMailer.html + verification_code)
                                     .then((response) => {
                                         User.update(UserModel, data, updatedData)
                                             .then(() => {
                                                 res.status(SUCCESS)
-                                                res.json(successResponse(SUCCESS, { access_token: updatedData.access_token, status: 1, email: email }, 'An Email has been sent , please verify.'));
+                                                res.json(successResponse(SUCCESS, { access_token: updatedData.access_token, status: 1, email: email }, 'An OTP has been sent, Please verify.'));
                                             }).catch((e) => {
                                                 res.status(ERROR);
                                                 res.json(successResponse(ERROR, e, 'Error.'));
@@ -183,11 +191,11 @@ export class UserController extends BaseAPIController {
                         User.save(UserModel, user)
                             .then((userData) => {
                                 let access_token = encodeToken(userData._id)
-                                userData.access_token = access_token
+                                userData.access_token = access_token;
                                 User.update(UserModel, { fb_id: fb_id }, { access_token: access_token })
-                                    .then(() => {
+                                    .then((resp) => {
                                         res.status(SUCCESS)
-                                        res.json(successResponse(SUCCESS, userData, 'Logged in successfully.'));
+                                        res.json(successResponse(SUCCESS, resp, 'Logged in successfully.'));
                                     }).catch((e) => {
                                         res.status(ERROR);
                                         res.json(successResponse(ERROR, e, 'Error.'));
@@ -212,9 +220,9 @@ export class UserController extends BaseAPIController {
         const UserModel = req.User;
         let data = {};
         if (mobile && verification_code) {
-            data = { mobile: mobile, verification_code: Number(verification_code) }
+            data = { mobile: mobile }
         } else if (email && verification_code) {
-            data = { email: email, verification_code: Number(verification_code) }
+            data = { email: email }
         } else {
             res.status(ERROR)
             res.json(successResponse(ERROR, {}, 'Some parameter missing.'));
@@ -232,17 +240,23 @@ export class UserController extends BaseAPIController {
                     } else {
                         updatedData = { is_verify: 1 };
                     }
-
-                    console.log(updatedData)
                     updatedData.access_token = user.get('access_token')
-                    User.update(UserModel, data, updatedData)
-                        .then(() => {
-                            res.status(SUCCESS);
-                            res.json(successResponse(SUCCESS, updatedData, 'OTP match successfully.'));
-                        }).catch((e) => {
+                    updatedData.verification_code = Number(verification_code)
+                    data.verification_code = Number(verification_code);
+                    UserModel.findOneAndUpdate(data, { $set: updatedData, returnNewDocument: true }, (err, insertData) => {
+                        if (err) {
                             res.status(ERROR);
-                            res.json(successResponse(ERROR, e, 'Error.'));
-                        })
+                            res.json(successResponse(ERROR, err, 'Error.'));
+                        } else {
+                            if (insertData) {
+                                res.status(SUCCESS);
+                                res.json(successResponse(SUCCESS, {}, 'OTP match successfully.'));
+                            } else {
+                                res.status(ERROR);
+                                res.json(successResponse(ERROR, {}, 'Invalid verification Code.'));
+                            }
+                        }
+                    });
                 }
             }).catch((e) => {
                 res.status(ERROR);
@@ -268,13 +282,14 @@ export class UserController extends BaseAPIController {
             .then((user) => {
                 if (!user) {
                     res.status(ERROR);
-                    res.json(successResponse(ERROR, {}, 'User not found.'));
+                    res.json(successResponse(ERROR, {}, 'Please enter the registered email or mobile number.'));
                 } else {
-                    // let verification_code = Math.ceil(Math.random() * 10000);
-                    let verification_code = 123456;
+                    let country_code = user.get('country_code');
+                    let verification_code = generateRandomString();
                     let updatedData = { verification_code: verification_code }
                     if (mobile) {
-                        twilio.sendMessageTwilio(`your Mypoty verification code is: ${verification_code}`, '+918126724591')
+                        console.log(country_code + mobile)
+                        twilio.sendMessageTwilio(`Please enter this verification code to verify: ${verification_code}`, country_code + mobile)
                             .then((result) => {
                                 User.update(UserModel, data, updatedData)
                                     .then(() => {
@@ -282,11 +297,11 @@ export class UserController extends BaseAPIController {
                                         res.json(successResponse(SUCCESS, '{}', 'An OTP has been sent,please verify.'));
                                     }).catch((e) => {
                                         res.status(ERROR);
-                                        res.json(successResponse(ERROR, e, 'Error.'));
+                                        res.json(successResponse(ERROR, e, 'Something Went Wrong.'));
                                     })
                             }).catch((e) => {
                                 res.status(ERROR);
-                                res.json(successResponse(ERROR, e, 'Error.'));
+                                res.json(successResponse(ERROR, e, 'You have entered a invalid Mobile Number.'));
                             })
                     } else {
                         mail.sendMail(email, constant().nodeMailer.subject, constant().nodeMailer.text, config.nodeMailer_email, constant().nodeMailer.html + verification_code)
@@ -294,10 +309,10 @@ export class UserController extends BaseAPIController {
                                 User.update(UserModel, data, updatedData)
                                     .then(() => {
                                         res.status(SUCCESS);
-                                        res.json(successResponse(SUCCESS, '{}', 'An Email has been sent,please verify.'));
+                                        res.json(successResponse(SUCCESS, '{}', 'An OTP has been sent, Please verify.'));
                                     }).catch((e) => {
                                         res.status(ERROR);
-                                        res.json(successResponse(ERROR, e, 'Error.'));
+                                        res.json(successResponse(ERROR, e, 'Email not send successfully.'));
                                     })
                             })
                             .catch((e) => {
@@ -361,23 +376,55 @@ export class UserController extends BaseAPIController {
             res.json(successResponse(ERROR, {}, 'User Details missing.'));
             return;
         }
+        let { mobile } = body.user;
         let UserModel = req.User;
         if (access_token) {
             user.status = 5;
-            UserModel.findOneAndUpdate({ "access_token": access_token }, { $set: user, returnNewDocument: true }, (err, insertData) => {
-                if (err) {
-                    res.status(ERROR);
-                    res.json(successResponse(ERROR, err, 'Error.'));
-                } else {
-                    if (insertData) {
-                        res.status(SUCCESS);
-                        res.json(successResponse(SUCCESS, { access_token: access_token, status: 5 }, 'UserName Saved successfully.'));
-                    } else {
+            if (mobile) {
+                User.findOne(UserModel, { mobile: mobile })
+                    .then((user) => {
+                        if (user) {
+                            res.status(ERROR);
+                            res.json(successResponse(ERROR, {}, 'Mobile Number already exist.'));
+                        } else {
+                            UserModel.findOneAndUpdate({ "access_token": access_token }, { $set: user, returnNewDocument: true }, (err, insertData) => {
+                                if (err) {
+                                    res.status(ERROR);
+                                    res.json(successResponse(ERROR, err, 'Error.'));
+                                } else {
+                                    if (insertData) {
+                                        res.status(SUCCESS);
+                                        res.json(successResponse(SUCCESS, { access_token: access_token, status: 5 }, 'UserName Saved successfully.'));
+                                    } else {
+                                        res.status(ERROR);
+                                        res.json(successResponse(ERROR, {}, 'Invalid access token.'));
+                                    }
+                                }
+                            });
+                        }
+                    }).catch((e) => {
                         res.status(ERROR);
-                        res.json(successResponse(ERROR, {}, 'Invalid access token.'));
-                    }
+                        res.json(successResponse(ERROR, e, 'Something Went Wrong.'));
+                    })
+            } else {
+                if (user.mobile) {
+                    delete user[mobile];
                 }
-            });
+                UserModel.findOneAndUpdate({ "access_token": access_token }, { $set: user, returnNewDocument: true }, (err, insertData) => {
+                    if (err) {
+                        res.status(ERROR);
+                        res.json(successResponse(ERROR, err, 'Error.'));
+                    } else {
+                        if (insertData) {
+                            res.status(SUCCESS);
+                            res.json(successResponse(SUCCESS, { access_token: access_token, status: 5 }, 'UserName Saved successfully.'));
+                        } else {
+                            res.status(ERROR);
+                            res.json(successResponse(ERROR, {}, 'Invalid access token.'));
+                        }
+                    }
+                });
+            }
         } else {
             res.status(ERROR);
             res.json(successResponse(ERROR, {}, 'access token missing.'));
@@ -489,30 +536,79 @@ export class UserController extends BaseAPIController {
     getOtherUsers = (req, res) => {
         let UserModel = req.User;
         let { list } = req.body;
+        let { access_token } = req.headers;
         let follow = [];
         let invite = [];
+        let userFollow = [];
+        let userFollowId = '';
         if (Array.isArray(list)) {
-            async.eachSeries(list, processData, function(err) {
-                if (err) {
-                    res.status(ERROR);
-                    res.json(successResponse(ERROR, err, 'Error.'));
-                } else {
-                    res.status(SUCCESS);
-                    res.json(successResponse(SUCCESS, { follow: follow, invite: invite }, 'get follow and invite Saved successfully.'));
-                }
-            })
+            if (access_token) {
+                UserModel.findOne({ access_token: access_token }, { "follow": 1 }, (err, result) => {
+                    if (err) {
+                        res.status(ERROR);
+                        res.json(successResponse(ERROR, err, 'Error.'));
+                    } else if (result) {
+                        userFollowId = result.get('_id');
+                        userFollow = result.get('follow') || "";
+                        async.eachSeries(list, processData, function(err) {
+                            if (err) {
+                                res.status(ERROR);
+                                res.json(successResponse(ERROR, err, 'Error.'));
+                            } else {
+                                res.status(SUCCESS);
+                                res.json(successResponse(SUCCESS, { follow: follow, invite: invite }, 'get follow and invite Saved successfully.'));
+                            }
+                        })
+                    } else {
+                        res.status(ERROR);
+                        res.json(successResponse(ERROR, {}, 'Invalid Access Token.'));
+                    }
+                })
+
+            } else {
+                res.status(ERROR);
+                res.json(successResponse(ERROR, {}, 'Access Token missing.'));
+            }
+
         } else {
             res.status(ERROR);
             res.json(successResponse(ERROR, {}, 'Invalid Array.'));
         }
 
         function processData(val, callback) {
-            UserModel.find({ $or: [{ "mobile": { $regex: val.mobile } }, { "email": { $regex: val.email } }] }, { "_id": 1, "mobile": 1, "email": 1, "full_name": 1, "profile_picture.path": 1, "profile_picture_url": 1 }, function(err, response) {
+            let result = [];
+            let where = {};
+            if (val && val.mobile && val.email) {
+                where = { $or: [{ "mobile": { $regex: val.mobile } }, { "email": { $regex: val.email } }] };
+            } else if (val && val.mobile) {
+                where = { $or: [{ "mobile": { $regex: val.mobile } }] }
+            } else if (val && val.email) {
+                where = { $or: [{ "email": { $regex: val.email } }] }
+            } else {
+                res.status(ERROR);
+                res.json(successResponse(ERROR, {}, 'parameter missing.'));
+            }
+
+            UserModel.find(where, { "_id": 1, "mobile": 1, "email": 1, "full_name": 1, "profile_picture.path": 1, "profile_picture.format": 1, "follow": 1, "status": 1 }, function(err, response) {
                 if (err) {
                     callback(err)
                 } else {
                     if (response && response.length) {
-                        follow = mergeArray(follow, response)
+                        _.map(response, (val, key) => {
+                            let follow = val._id;
+                            let status = val.get('status') ? val.get('status') : 0;
+                            if (!userFollow.includes(follow.toString()) && !(userFollowId.toString() == follow.toString()) && status == 6) {
+                                let resp = {};
+                                resp.id = val._id;
+                                resp.email = val.get('email') || "";
+                                resp.mobile = val.get('mobile') || "";
+                                resp.full_name = val.get('full_name') || "";
+                                resp.profile_picture = val.get('profile_picture') && val.get('profile_picture').path || "";
+                                resp.profile_picture_format = val.get('profile_picture') && val.get('profile_picture').format || 0;
+                                result.push(resp);
+                            }
+                        })
+                        follow = mergeArray(follow, result)
                     } else {
                         invite.push(val)
                     }
@@ -521,6 +617,59 @@ export class UserController extends BaseAPIController {
             })
         }
     }
+
+    changeMobile = (req, res) => {
+        let { access_token } = req.headers;
+        let { mobile, country_code } = req.body;
+        let UserModel = req.User;
+        if (access_token && mobile && country_code) {
+            User.findOne(UserModel, { access_token: access_token })
+                .then((user) => {
+                    if (user) {
+                        User.findOne(UserModel, { mobile: mobile })
+                            .then((mobileData) => {
+                                if (mobileData) {
+                                    res.status(ERROR);
+                                    res.json(successResponse(ERROR, {}, 'Mobile Number already Exist.'));
+                                } else {
+                                    country_code = countryCode(country_code);
+                                    let verification_code = generateRandomString();
+                                    let updatedData = { verification_code: verification_code }
+                                    updatedData.mobile = mobile;
+                                    updatedData.country_code = country_code;
+                                    twilio.sendMessageTwilio(`Please enter this verification code to verify: ${verification_code}`, country_code + mobile)
+                                        .then((result) => {
+                                            User.update(UserModel, { access_token: access_token }, updatedData)
+                                                .then((data) => {
+                                                    res.status(SUCCESS)
+                                                    res.json(successResponse(SUCCESS, { access_token: access_token }, 'An OTP has been sent,please verify.'));
+                                                }).catch((e) => {
+                                                    res.status(ERROR);
+                                                    res.json(successResponse(ERROR, e, "Something Went Wrong."));
+                                                })
+                                        }).catch((e) => {
+                                            res.status(ERROR);
+                                            res.json(successResponse(ERROR, e, 'You have entered a invalid Mobile Number.'));
+                                        })
+                                }
+                            }).catch((e) => {
+                                res.status(ERROR);
+                                res.json(successResponse(ERROR, {}, 'Something Went Wrong'));
+                            })
+                    } else {
+                        res.status(ERROR);
+                        res.json(successResponse(ERROR, {}, 'Invalid access token.'));
+                    }
+                }).catch((e) => {
+                    res.status(ERROR);
+                    res.json(successResponse(ERROR, {}, 'Something Went Wrong'));
+                })
+        } else {
+            res.status(ERROR);
+            res.json(successResponse(ERROR, {}, 'Some parameter missing.'));
+        }
+    }
+
 }
 
 const controller = new UserController();

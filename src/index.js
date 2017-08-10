@@ -23,6 +23,7 @@ app.use(bodyParser.urlencoded({
     extended: true
 }));
 app.use(bodyParser.json());
+app.use(express.static(path.join(__dirname, '../uploads')))
 const initRoutes = (app) => {
     // including all routes
     glob("./routes/*.js", {

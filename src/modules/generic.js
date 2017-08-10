@@ -51,8 +51,20 @@ const checkBlank = (arr) => {
 };
 
 const mergeArray = (arr1 = [], arr2 = []) => {
-    return _(arr1).keyBy('_id').merge(_.keyBy(arr2, '_id')).values().value();
+    return _(arr1).keyBy('id').merge(_.keyBy(arr2, 'id')).values().value();
 }
+
+const countryCode = (country_code) => {
+    if (!country_code.includes("+")) {
+        country_code = '+' + country_code
+    };
+    return country_code;
+}
+
+const generateRandomString = () => {
+    return Math.floor(1000 + Math.random() * 9000);
+}
+
 
 module.exports = {
     getSuccess,
@@ -62,5 +74,7 @@ module.exports = {
     validateEmail,
     successResponse,
     checkBlank,
-    mergeArray
+    mergeArray,
+    countryCode,
+    generateRandomString
 };

@@ -1,13 +1,16 @@
 import image from "../controllers/image";
-var multer = require('multer');
-var Grid = require('gridfs-stream');
-var path = require('path');
-var md5 = require('md5');
+import mkdirp from "mkdirp";
+import multer from "multer";
+import Grid from "gridfs-stream";
+import path from "path";
+import md5 from "md5";
 
 export default (app) => {
     var storage = multer.diskStorage({
         destination: function(req, file, callback) {
-            callback(null, 'uploads');
+            let dest = 'uploads/profile';
+            mkdirp.sync(dest);
+            callback(null, dest);
         },
         filename: function(req, file, callback) {
             var fileUniquename = Date.now();
@@ -15,7 +18,7 @@ export default (app) => {
         }
     });
     var upload = multer({ storage: storage });
-    
+
     app.post('/upload/profileImage', upload.single('file'), image.profileImage);
 
     return app;
