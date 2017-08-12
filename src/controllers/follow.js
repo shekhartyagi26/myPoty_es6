@@ -12,12 +12,12 @@ export class ImageController extends BaseAPIController {
         let followers = [];
         let userFollower = [];
         if (user_id && access_token) {
-            UserModel.findOne({ access_token: access_token }, { "following": 1 }, function(err, response) {
+            UserModel.findOne({ access_token: access_token }, { "follow": 1 }, function(err, response) {
                 if (err) {
                     res.status(ERROR);
                     res.json(successResponse(ERROR, err, 'Error.'));
                 } else if (response) {
-                    userFollower = response.get('following');
+                    userFollower = response.get('follow');
                     UserModel.findOne({ _id: user_id }, { "_id": 1, "following": 1 }, function(err, result) {
                         if (err) {
                             res.status(ERROR);
@@ -57,10 +57,10 @@ export class ImageController extends BaseAPIController {
                 if (err) {
                     callback();
                 } else {
-                    let followerId = result.get('_id');
+                    let followerId = result.get('_id').toString();
                     let resp = {};
-                    resp.user_id = result._id;
-                    resp.is_follower = userFollower && userFollower.includes(followerId.toString()) ? 1 : 0;
+                    resp.id = result._id;
+                    resp.is_following = userFollower && userFollower.includes(followerId) ? 1 : 0;
                     resp.full_name = result.get('full_name') || "";
                     resp.profile_picture = result.get('profile_picture') && result.get('profile_picture').path || "";
                     followers.push(resp);
@@ -81,10 +81,10 @@ export class ImageController extends BaseAPIController {
         let message = '';
         if (access_token && followers_id) {
             if (follow) {
-                whereFollowers = { "$addToSet": { "follow": followers_id }, returnNewDocument: true };
+                whereFollowers = { "$addToSet": { "follow": followers_id.toString() }, returnNewDocument: true };
                 message = 'Followers Add Successfully.';
             } else {
-                whereFollowers = { "$pull": { "follow": followers_id }, returnNewDocument: true };
+                whereFollowers = { "$pull": { "follow": followers_id.toString() }, returnNewDocument: true };
                 message = 'Followers remove Successfully.';
             }
 
@@ -162,6 +162,7 @@ export class ImageController extends BaseAPIController {
         let UserModel = req.User;
         let followers = [];
         let userFollowing = [];
+        let followingId = '';
         if (user_id && access_token) {
             UserModel.findOne({ access_token: access_token }, { "follow": 1 }, function(err, response) {
                 if (err) {
@@ -169,6 +170,7 @@ export class ImageController extends BaseAPIController {
                     res.json(successResponse(ERROR, err, 'Error.'));
                 } else if (response) {
                     userFollowing = response.get('follow');
+                    followingId = response.get('_id');
                     UserModel.findOne({ _id: user_id }, { "_id": 1, "follow": 1 }, function(err, result) {
                         if (err) {
                             res.status(ERROR);
@@ -208,10 +210,14 @@ export class ImageController extends BaseAPIController {
                 if (err) {
                     callback();
                 } else {
-                    let followerId = result.get('_id');
+                    let followerId = result.get('_id').toString();
                     let resp = {};
-                    resp.id = result._id;
-                    resp.is_following = userFollowing && userFollowing.includes(followerId.toString()) ? 1 : 0;
+                    if (followingId.toString() == followerId) {
+                        resp.id = ''
+                    } else {
+                        resp.id = result._id;
+                    }
+                    resp.is_following = userFollowing && userFollowing.includes(followerId) ? 1 : 0;
                     resp.full_name = result.get('full_name') || "";
                     resp.profile_picture = result.get('profile_picture') && result.get('profile_picture').path || "";
                     resp.profile_picture_format = result.get('profile_picture') && result.get('profile_picture').format || 0;

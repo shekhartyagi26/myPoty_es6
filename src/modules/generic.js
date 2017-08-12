@@ -32,7 +32,7 @@ const validateEmail = (email) => {
 
 const successResponse = (status = 200, response = '{}', message = "", flag = 1) => {
     return ({
-        "status": status,
+        // "status": status,
         "flag": flag,
         "response": response,
         "message": message

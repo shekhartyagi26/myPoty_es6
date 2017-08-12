@@ -94,7 +94,7 @@ export class UserController extends BaseAPIController {
                     res.status(ERROR)
                     res.json(successResponse(ERROR, {}, 'User already exist.'));
                 } else {
-                     console.log('11111111')
+                    console.log('11111111')
                     let md5 = crypto.createHash('md5');
                     md5.update(password);
                     let pass_md5 = md5.digest('hex');
@@ -108,13 +108,11 @@ export class UserController extends BaseAPIController {
                     user_details.status = 1;
                     User.save(UserModel, user_details)
                         .then((userData) => {
-                             console.log('22222222222')
-                            // let verification_code = generateRandomString();
-                            let verification_code = 123456;
+                            let verification_code = generateRandomString();
+                            // let verification_code = 123456;
                             let updatedData = { verification_code: verification_code }
                             updatedData.access_token = encodeToken(userData._id);
                             if (mobile) {
-                                 console.log('44444444444')
                                 twilio.sendMessageTwilio(`Please enter this verification code to verify: ${verification_code}`, country_code + mobile)
                                     .then((result) => {
                                         User.update(UserModel, data, updatedData)
@@ -185,8 +183,16 @@ export class UserController extends BaseAPIController {
             User.findOne(UserModel, { fb_id: fb_id })
                 .then((user_details) => {
                     if (user_details) {
-                        res.status(SUCCESS)
-                        res.json(successResponse(SUCCESS, user_details, 'Logged in successfully.'));
+                        let access_token = encodeToken(user_details._id)
+                        UserModel.findOneAndUpdate({ fb_id: fb_id }, { $set: { access_token: access_token } }, { new: true }, (err, response) => {
+                            if (err) {
+                                res.status(ERROR);
+                                res.json(successResponse(ERROR, e, 'Error.'));
+                            } else {
+                                res.status(SUCCESS)
+                                res.json(successResponse(SUCCESS, response, 'Logged in successfully.'));
+                            }
+                        })
                     } else {
                         User.save(UserModel, user)
                             .then((userData) => {
@@ -286,9 +292,9 @@ export class UserController extends BaseAPIController {
                 } else {
                     let country_code = user.get('country_code');
                     let verification_code = generateRandomString();
+                    // let verification_code = 123456;
                     let updatedData = { verification_code: verification_code }
                     if (mobile) {
-                        console.log(country_code + mobile)
                         twilio.sendMessageTwilio(`Please enter this verification code to verify: ${verification_code}`, country_code + mobile)
                             .then((result) => {
                                 User.update(UserModel, data, updatedData)
@@ -407,8 +413,8 @@ export class UserController extends BaseAPIController {
                         res.json(successResponse(ERROR, e, 'Something Went Wrong.'));
                     })
             } else {
-                if (user.mobile) {
-                    delete user[mobile];
+                if (user && user.mobile) {
+                    user = _.omit(user, 'mobile')
                 }
                 UserModel.findOneAndUpdate({ "access_token": access_token }, { $set: user, returnNewDocument: true }, (err, insertData) => {
                     if (err) {
@@ -427,7 +433,7 @@ export class UserController extends BaseAPIController {
             }
         } else {
             res.status(ERROR);
-            res.json(successResponse(ERROR, {}, 'access token missing.'));
+            res.json(successResponse(ERROR, {}, 'Access token missing.'));
         }
     }
 
@@ -458,7 +464,7 @@ export class UserController extends BaseAPIController {
                 } else {
                     if (insertData) {
                         res.status(SUCCESS);
-                        res.json(successResponse(SUCCESS, { access_token: access_token, status: 6 }, 'User Interest Saved successfully.'));
+                        res.json(successResponse(SUCCESS, { access_token: access_token, status: 6 }, 'User interest Saved successfully.'));
                     } else {
                         res.status(ERROR);
                         res.json(successResponse(ERROR, {}, 'Invalid access token.'));
@@ -482,7 +488,7 @@ export class UserController extends BaseAPIController {
                 } else {
                     if (insertData) {
                         res.status(SUCCESS);
-                        res.json(successResponse(SUCCESS, {}, 'User Logout successfully.'));
+                        res.json(successResponse(SUCCESS, {}, 'User logout successfully.'));
                     } else {
                         res.status(ERROR);
                         res.json(successResponse(ERROR, {}, 'Invalid access token.'));
@@ -491,7 +497,7 @@ export class UserController extends BaseAPIController {
             });
         } else {
             res.status(ERROR);
-            res.json(successResponse(ERROR, {}, 'access token missing.'));
+            res.json(successResponse(ERROR, {}, 'Access token missing.'));
         }
     }
 
@@ -520,7 +526,7 @@ export class UserController extends BaseAPIController {
                 } else {
                     if (insertData) {
                         res.status(SUCCESS);
-                        res.json(successResponse(SUCCESS, {}, 'password changed successfully.'));
+                        res.json(successResponse(SUCCESS, {}, 'Password changed successfully.'));
                     } else {
                         res.status(ERROR);
                         res.json(successResponse(ERROR, {}, 'Invalid access token.'));
@@ -529,7 +535,7 @@ export class UserController extends BaseAPIController {
             });
         } else {
             res.status(ERROR);
-            res.json(successResponse(ERROR, {}, 'access token missing.'));
+            res.json(successResponse(ERROR, {}, 'Access token missing.'));
         }
     }
 
@@ -556,18 +562,18 @@ export class UserController extends BaseAPIController {
                                 res.json(successResponse(ERROR, err, 'Error.'));
                             } else {
                                 res.status(SUCCESS);
-                                res.json(successResponse(SUCCESS, { follow: follow, invite: invite }, 'get follow and invite Saved successfully.'));
+                                res.json(successResponse(SUCCESS, { follow: follow, invite: invite }, 'Get follow and invite saved successfully.'));
                             }
                         })
                     } else {
                         res.status(ERROR);
-                        res.json(successResponse(ERROR, {}, 'Invalid Access Token.'));
+                        res.json(successResponse(ERROR, {}, 'Invalid access token.'));
                     }
                 })
 
             } else {
                 res.status(ERROR);
-                res.json(successResponse(ERROR, {}, 'Access Token missing.'));
+                res.json(successResponse(ERROR, {}, 'Access token missing.'));
             }
 
         } else {
@@ -586,7 +592,8 @@ export class UserController extends BaseAPIController {
                 where = { $or: [{ "email": { $regex: val.email } }] }
             } else {
                 res.status(ERROR);
-                res.json(successResponse(ERROR, {}, 'parameter missing.'));
+                res.json(successResponse(ERROR, {}, 'Parameter missing.'));
+                return;
             }
 
             UserModel.find(where, { "_id": 1, "mobile": 1, "email": 1, "full_name": 1, "profile_picture.path": 1, "profile_picture.format": 1, "follow": 1, "status": 1 }, function(err, response) {
@@ -630,7 +637,7 @@ export class UserController extends BaseAPIController {
                             .then((mobileData) => {
                                 if (mobileData) {
                                     res.status(ERROR);
-                                    res.json(successResponse(ERROR, {}, 'Mobile Number already Exist.'));
+                                    res.json(successResponse(ERROR, {}, 'Mobile number already exist.'));
                                 } else {
                                     country_code = countryCode(country_code);
                                     let verification_code = generateRandomString();
@@ -642,19 +649,19 @@ export class UserController extends BaseAPIController {
                                             User.update(UserModel, { access_token: access_token }, updatedData)
                                                 .then((data) => {
                                                     res.status(SUCCESS)
-                                                    res.json(successResponse(SUCCESS, { access_token: access_token }, 'An OTP has been sent,please verify.'));
+                                                    res.json(successResponse(SUCCESS, { access_token: access_token }, 'An OTP has been sent, please verify.'));
                                                 }).catch((e) => {
                                                     res.status(ERROR);
-                                                    res.json(successResponse(ERROR, e, "Something Went Wrong."));
+                                                    res.json(successResponse(ERROR, e, "Something went wrong."));
                                                 })
                                         }).catch((e) => {
                                             res.status(ERROR);
-                                            res.json(successResponse(ERROR, e, 'You have entered a invalid Mobile Number.'));
+                                            res.json(successResponse(ERROR, e, 'You have entered a invalid mobile number.'));
                                         })
                                 }
                             }).catch((e) => {
                                 res.status(ERROR);
-                                res.json(successResponse(ERROR, {}, 'Something Went Wrong'));
+                                res.json(successResponse(ERROR, {}, 'Something went wrong'));
                             })
                     } else {
                         res.status(ERROR);
@@ -662,7 +669,7 @@ export class UserController extends BaseAPIController {
                     }
                 }).catch((e) => {
                     res.status(ERROR);
-                    res.json(successResponse(ERROR, {}, 'Something Went Wrong'));
+                    res.json(successResponse(ERROR, {}, 'Something went wrong'));
                 })
         } else {
             res.status(ERROR);
