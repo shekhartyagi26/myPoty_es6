@@ -11,7 +11,6 @@ import mail from "../modules/mail";
 import constant from "../models/constant";
 import jwt from "jwt-simple";
 import { encodeToken } from "../modules/token";
-import token from "../modules/token";
 import async from "async";
 import _ from "lodash";
 
@@ -67,7 +66,6 @@ export class UserController extends BaseAPIController {
 
     signUp = (req, res) => {
         var body = req.body;
-        console.log(body)
         var user_details = body.user;
         let UserModel = req.User;
         if (!user_details) {
@@ -94,7 +92,6 @@ export class UserController extends BaseAPIController {
                     res.status(ERROR)
                     res.json(successResponse(ERROR, {}, 'User already exist.'));
                 } else {
-                    console.log('11111111')
                     let md5 = crypto.createHash('md5');
                     md5.update(password);
                     let pass_md5 = md5.digest('hex');
@@ -129,7 +126,6 @@ export class UserController extends BaseAPIController {
                                         res.json(successResponse(ERROR, e, 'You have entered a invalid Mobile Number.'));
                                     })
                             } else {
-                                console.log('33333333333')
                                 mail.sendMail(email, constant().nodeMailer.subject, constant().nodeMailer.text, config.nodeMailer_email, constant().nodeMailer.html + verification_code)
                                     .then((response) => {
                                         User.update(UserModel, data, updatedData)
@@ -388,11 +384,12 @@ export class UserController extends BaseAPIController {
             user.status = 5;
             if (mobile) {
                 User.findOne(UserModel, { mobile: mobile })
-                    .then((user) => {
-                        if (user) {
+                    .then((userData) => {
+                        if (userData) {
                             res.status(ERROR);
                             res.json(successResponse(ERROR, {}, 'Mobile Number already exist.'));
                         } else {
+                            console.log(user)
                             UserModel.findOneAndUpdate({ "access_token": access_token }, { $set: user, returnNewDocument: true }, (err, insertData) => {
                                 if (err) {
                                     res.status(ERROR);
@@ -457,14 +454,14 @@ export class UserController extends BaseAPIController {
         }
         let UserModel = req.User;
         if (access_token) {
-            UserModel.findOneAndUpdate({ "access_token": access_token }, { $set: { user_interest: list, status: 6 }, returnNewDocument: true }, (err, insertData) => {
+            UserModel.findOneAndUpdate({ "access_token": access_token }, { $set: { user_interest: list, status: 6 }, returnNewDocument: true }, { new: true }, (err, insertData) => {
                 if (err) {
                     res.status(ERROR);
                     res.json(successResponse(ERROR, err, 'Error.'));
                 } else {
                     if (insertData) {
                         res.status(SUCCESS);
-                        res.json(successResponse(SUCCESS, { access_token: access_token, status: 6 }, 'User interest Saved successfully.'));
+                        res.json(successResponse(SUCCESS, insertData, 'User interest Saved successfully.'));
                     } else {
                         res.status(ERROR);
                         res.json(successResponse(ERROR, {}, 'Invalid access token.'));
@@ -602,7 +599,7 @@ export class UserController extends BaseAPIController {
                 where = '';
             }
             if (where) {
-                UserModel.find(where, { "_id": 1, "mobile": 1, "email": 1, "full_name": 1, "profile_picture.path": 1, "profile_picture.format": 1, "follow": 1, "status": 1 }, function(err, response) {
+                UserModel.find(where, { "_id": 1, "mobile": 1, "email": 1, "full_name": 1, "profile_picture.path": 1, "profile_picture.profile_picture_format": 1, "follow": 1, "status": 1 }, function(err, response) {
                     if (err) {
                         callback(err)
                     } else {
@@ -618,7 +615,7 @@ export class UserController extends BaseAPIController {
                                     resp.mobile = val.get('mobile') || "";
                                     resp.full_name = full_name;
                                     resp.profile_picture = val.get('profile_picture') && val.get('profile_picture').path || "";
-                                    resp.profile_picture_format = val.get('profile_picture') && val.get('profile_picture').format || 0;
+                                    resp.profile_picture_format = val.get('profile_picture') && val.get('profile_picture').profile_picture_format || 0;
                                     result.push(resp);
                                 }
                             })

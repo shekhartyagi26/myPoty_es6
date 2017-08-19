@@ -63,6 +63,7 @@ const update = (db, checkData, updateData) => {
         })
     })
 };
+
 export default {
     create,
     findOne,
