@@ -1,4 +1,5 @@
 import user from "../controllers/user";
+import auth from "../middleware/auth";
 
 export default (app) => {
 
@@ -18,28 +19,28 @@ export default (app) => {
     app.route("/user/forgotPassword").post(user.forgotPassword);
 
     /* Route for create UserName */
-    app.route("/user/createUserName").post(user.createUserName);
+    app.route("/user/createUserName").post(auth.requiresLogin, user.createUserName);
 
     /* Route for save Personal Details */
-    app.route("/user/savePersonalDetails").post(user.savePersonalDetails);
+    app.route("/user/savePersonalDetails").post(auth.requiresLogin, user.savePersonalDetails);
 
-    /* Route for save Personal Details */
+    /* Route for get intresets */
     app.route("/user/getInterests").get(user.intrestingTopics);
 
     /* Route for save Personal Details */
-    app.route("/user/saveInterest").post(user.saveInterest);
+    app.route("/user/saveInterest").post(auth.requiresLogin, user.saveInterest);
 
     /* Route for logout */
     app.route("/user/resetPassword").post(user.resetPassword);
 
     /* Route for logout */
-    app.route("/user/logout").post(user.logout);
+    app.route("/user/logout").post(auth.requiresLogin, user.logout);
 
     /* Route for logout */
-    app.route("/user/getOtherUsers").post(user.getOtherUsers);
+    app.route("/user/getOtherUsers").post(auth.requiresLogin, user.getOtherUsers);
 
     /* Route for change Mobile */
-    app.route("/user/changeMobile").post(user.changeMobile);
+    app.route("/user/changeMobile").post(auth.requiresLogin, user.changeMobile);
 
     return app;
 };

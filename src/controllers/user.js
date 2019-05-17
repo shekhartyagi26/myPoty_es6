@@ -1,18 +1,17 @@
 import BaseAPIController from "./BaseAPIController";
-import UserProvider from "../providers/UserProvider.js";
 import User from "../models/User.js";
+import Topics from "../models/IntrestingTopics.js";
 import generatePassword from 'password-generator';
-import crypto from 'crypto';
 import config from "../../config.json";
-import { getSuccess, notFoundError, serverError, getSuccessMessage, validateEmail, successResponse, mergeArray, countryCode, generateRandomString } from "../modules/generic";
-import { SUCCESS, ERROR } from "../modules/constant";
+import { successResult, verifyData, encodePassword, serverError, mergeArray, countryCode, generateRandomString, validate, parameterMissing } from "../modules/generic";
 import twilio from "../modules/twilio";
 import mail from "../modules/mail";
 import constant from "../models/constant";
-import jwt from "jwt-simple";
 import { encodeToken } from "../modules/token";
 import async from "async";
 import _ from "lodash";
+import { PARAMETER_MISSING_STATUS, BAD_REQUEST_STATUS, ALREADY_EXIST, SUCCESS_STATUS } from '../constant/status';
+import { USERNAME_EXIST, INVALID_ARRAY, INVALID_LOGIN_MESSAGE, USER_EXIST, LOGIN_SUCCESSFULLY_MESSAGE, MOBILE_NUMBER_MESSAGE, OTP_MATCHED, INVALID_VERIFICATION_CODE, USER_LOGOUT_MESSAGE, PASSWORD_CHANGE_MESSAGE, INVALID_MOBILE_EMAIL, OTP_SENT, VERIFICATION_MESSAGE } from '../constant/message';
 
 export class UserController extends BaseAPIController {
 
@@ -20,82 +19,53 @@ export class UserController extends BaseAPIController {
     login = (req, res) => {
         let { email, mobile, password } = req.body;
         let data = {};
-        let UserModel = req.User;
         if (mobile && password) {
             data = { mobile: mobile }
         } else if (email && password) {
             data = { email: email }
         } else {
-            res.status(ERROR)
-            res.json(successResponse(ERROR, {}, 'Some parameter missing.'));
+            res.status(PARAMETER_MISSING_STATUS).json(parameterMissing());
             return;
         }
-        var md5 = crypto.createHash('md5');
-        md5.update(password);
-        var pass_md5 = md5.digest('hex');
-        data.password = pass_md5
-        User.findOne(UserModel, data)
-            .then((user) => {
-                if (user) {
-                    let access_token = encodeToken(user._id)
-                    UserModel.findOneAndUpdate(data, { $set: { "access_token": access_token }, returnNewDocument: true, upsert: true }, { new: true }, (err, insertData) => {
-                        if (err) {
-                            res.status(ERROR);
-                            res.json(successResponse(ERROR, err, 'Error.'));
-                        } else {
-                            if (insertData) {
-                                delete insertData.get('password')
-                                res.status(SUCCESS);
-                                res.json(successResponse(SUCCESS, insertData, 'Logged in successfully.'));
-                            } else {
-
-                                res.status(ERROR);
-                                res.json(successResponse(ERROR, {}, 'Invalid access token.'));
-                            }
-                        }
-                    });
-                } else {
-                    res.status(ERROR);
-                    res.json(successResponse(ERROR, {}, 'The username or password you entered is incorrect.'));
-                }
-            }).catch((e) => {
-                res.status(ERROR);
-                res.json(successResponse(ERROR, e, 'Error.'));
-            })
+        let UserModel = req.User;
+        data.password = encodePassword(password);
+        User.findOne(UserModel, data).then((user) => {
+            if (user) {
+                let access_token = encodeToken(user._id)
+                User.update(UserModel, data, { access_token }).then((result) => {
+                    res.status(SUCCESS_STATUS).json(successResult(result, LOGIN_SUCCESSFULLY_MESSAGE))
+                }).catch((e) => { res.status(BAD_REQUEST_STATUS).json(serverError(e)); });
+            } else {
+                res.status(PARAMETER_MISSING_STATUS).json(parameterMissing(INVALID_LOGIN_MESSAGE));
+            }
+        }).catch((e) => { res.status(BAD_REQUEST_STATUS).json(serverError(e)); });
     }
 
+    /*Controller for manual signup*/
     signUp = (req, res) => {
-        var body = req.body;
-        var user_details = body.user;
+        let user_details = req.body.user;
         let UserModel = req.User;
         if (!user_details) {
-            res.status(ERROR)
-            res.json(successResponse(ERROR, {}, 'Some parameter missing.'));
+            res.status(PARAMETER_MISSING_STATUS).json(parameterMissing())
             return;
         }
-
         let data = {};
-        let { mobile, email, password, country_code } = body.user;
+        let { mobile, email, password, country_code } = req.body.user
         if (mobile && password && country_code) {
             country_code = countryCode(country_code);
             data = { mobile: mobile }
         } else if (email && password) {
             data = { email: email }
         } else {
-            res.status(ERROR)
-            res.json(successResponse(ERROR, {}, 'Some parameter missing.'));
+            res.status(PARAMETER_MISSING_STATUS).json(parameterMissing())
             return;
         }
         User.findOne(UserModel, data)
             .then((user) => {
                 if (user) {
-                    res.status(ERROR)
-                    res.json(successResponse(ERROR, {}, 'User already exist.'));
+                    res.status(PARAMETER_MISSING_STATUS).json(parameterMissing(USER_EXIST))
                 } else {
-                    let md5 = crypto.createHash('md5');
-                    md5.update(password);
-                    let pass_md5 = md5.digest('hex');
-                    user_details.password = pass_md5
+                    user_details.password = encodePassword(password)
                     user_details.created_on = new Date();
                     user_details.timeStamp = new Date().getTime();
                     user_details.is_verify = 0;
@@ -108,115 +78,59 @@ export class UserController extends BaseAPIController {
                             let verification_code = generateRandomString();
                             // let verification_code = 123456;
                             let updatedData = { verification_code: verification_code }
-                            updatedData.access_token = encodeToken(userData._id);
-                            if (mobile) {
-                                twilio.sendMessageTwilio(`Please enter this verification code to verify: ${verification_code}`, country_code + mobile)
-                                    .then((result) => {
-                                        User.update(UserModel, data, updatedData)
-                                            .then((data) => {
-                                                res.status(SUCCESS)
-                                                res.json(successResponse(SUCCESS, { access_token: updatedData.access_token, status: 1, mobile: mobile }, 'An OTP has been sent,please verify.'));
-                                            }).catch((e) => {
-                                                res.status(ERROR);
-                                                res.json(successResponse(ERROR, e, "Something Went Wrong."));
-                                            })
-                                    }).catch((e) => {
-                                        userData.remove();
-                                        res.status(ERROR);
-                                        res.json(successResponse(ERROR, e, 'You have entered a invalid Mobile Number.'));
-                                    })
-                            } else {
-                                mail.sendMail(email, constant().nodeMailer.subject, constant().nodeMailer.text, config.nodeMailer_email, constant().nodeMailer.html + verification_code)
-                                    .then((response) => {
-                                        User.update(UserModel, data, updatedData)
-                                            .then(() => {
-                                                res.status(SUCCESS)
-                                                res.json(successResponse(SUCCESS, { access_token: updatedData.access_token, status: 1, email: email }, 'An OTP has been sent, Please verify.'));
-                                            }).catch((e) => {
-                                                res.status(ERROR);
-                                                res.json(successResponse(ERROR, e, 'Error.'));
-                                            })
-                                    })
-                                    .catch((e) => {
-                                        res.status(ERROR);
-                                        res.json(successResponse(ERROR, e, 'Error.'));
-                                    });
-                            }
-                        }).catch((e) => {
-                            res.status(ERROR);
-                            res.json(successResponse(ERROR, e, 'Error.'));
-                        })
+                            let access_token = encodeToken(userData._id);;
+                            updatedData.access_token = access_token;
+                            let dbql = mobile ? twilio.sendMessageTwilio(VERIFICATION_MESSAGE + verification_code, country_code + mobile) : mail.sendMail(email, constant().nodeMailer.subject, constant().nodeMailer.text, config.nodeMailer_email, constant().nodeMailer.html + verification_code);
+                            dbql.then((result) => {
+                                User.update(UserModel, data, updatedData).then((result) => {
+                                    let sentData = { access_token, status: 1 };
+                                    mobile ? sentData.mobile = mobile : sentData.email = email;
+                                    res.status(SUCCESS_STATUS).json(successResult(sentData, OTP_SENT))
+                                }).catch((e) => { res.status(BAD_REQUEST_STATUS).json(serverError(e)); });
+                            }).catch((e) => { res.status(BAD_REQUEST_STATUS).json(serverError(e)); });
+                        }).catch((e) => { res.status(BAD_REQUEST_STATUS).json(serverError(e)); });
                 }
-            }).catch((e) => {
-                res.status(ERROR)
-                res.json(successResponse(ERROR, e, 'Error.'));
-            })
+            }).catch((e) => { res.status(BAD_REQUEST_STATUS).json(serverError(e)); });
     }
 
+    /*Controller for social Login and social signup*/
     socialLogin = (req, res) => {
         let body = req.body;
         let user = body.user;
-        if (!user) {
-            res.status(ERROR)
-            res.json(successResponse(ERROR, {}, 'Some parameter missing.'));
+        const UserModel = req.User;
+        if (!user || !user.fb_id) {
+            res.status(PARAMETER_MISSING_STATUS).json(parameterMissing())
             return;
         }
-        let password = '';
         let fb_id = user.fb_id;
-        if (fb_id) {
-            user.type = 'facebook';
-            password = generatePassword(6);
-            user.password = password;
-            user.created_on = new Date();
-            user.timeStamp = new Date().getTime();
-            user.is_verify = 0;
-            user.is_deleted = 0;
-            user.is_blocked = 0;
-            user.modified_on = new Date();
-            user.status = 2;
-            const UserModel = req.User;
-            var userObj = user;
-            User.findOne(UserModel, { fb_id: fb_id })
-                .then((user_details) => {
-                    if (user_details) {
-                        let access_token = encodeToken(user_details._id)
-                        UserModel.findOneAndUpdate({ fb_id: fb_id }, { $set: { access_token: access_token } }, { new: true }, (err, response) => {
-                            if (err) {
-                                res.status(ERROR);
-                                res.json(successResponse(ERROR, e, 'Error.'));
-                            } else {
-                                res.status(SUCCESS)
-                                res.json(successResponse(SUCCESS, response, 'Logged in successfully.'));
-                            }
-                        })
-                    } else {
-                        User.save(UserModel, user)
-                            .then((userData) => {
-                                let access_token = encodeToken(userData._id)
-                                userData.access_token = access_token;
-                                User.update(UserModel, { fb_id: fb_id }, { access_token: access_token })
-                                    .then((resp) => {
-                                        res.status(SUCCESS)
-                                        res.json(successResponse(SUCCESS, resp, 'Logged in successfully.'));
-                                    }).catch((e) => {
-                                        res.status(ERROR);
-                                        res.json(successResponse(ERROR, e, 'Error.'));
-                                    })
-                            }).catch((e) => {
-                                res.status(ERROR);
-                                res.json(successResponse(ERROR, e, 'Error.'));
-                            })
-                    }
-                }).catch((e) => {
-                    res.status(ERROR);
-                    res.json(successResponse(ERROR, e, 'Error.'));
-                })
-        } else {
-            res.status(ERROR)
-            res.json(successResponse(ERROR, {}, 'Some parameter missing.'));
-        }
+
+        User.findOne(UserModel, { fb_id }).then((user_details) => {
+            if (user_details) {
+                let access_token = encodeToken(user_details._id)
+                User.update(UserModel, { fb_id }, { access_token }).then((result) => {
+                    res.status(SUCCESS_STATUS).json(successResult(result, LOGIN_SUCCESSFULLY_MESSAGE))
+                }).catch((e) => { res.status(BAD_REQUEST_STATUS).json(serverError(e)); });
+            } else {
+                user = verifyData(user);
+                user.password = generatePassword(6);
+                user.created_on = new Date();
+                user.timeStamp = new Date().getTime();
+                user.is_verify = 0;
+                user.is_deleted = 0;
+                user.is_blocked = 0;
+                user.modified_on = new Date();
+                user.status = 2;
+                User.save(UserModel, user).then((result) => {
+                    let access_token = encodeToken(userData._id)
+                    User.update(UserModel, { fb_id }, { access_token }).then((result) => {
+                        res.status(SUCCESS_STATUS).json(successResult(result, LOGIN_SUCCESSFULLY_MESSAGE))
+                    }).catch((e) => { res.status(BAD_REQUEST_STATUS).json(serverError(e)); });
+                }).catch((e) => { res.status(BAD_REQUEST_STATUS).json(serverError(e)); });
+            }
+        }).catch((e) => { res.status(BAD_REQUEST_STATUS).json(serverError(e)); });
     }
 
+    /*Controller for verify verification code*/
     verifyCode = (req, res) => {
         let { mobile, email, verification_code, update } = req.body;
         const UserModel = req.User;
@@ -226,47 +140,22 @@ export class UserController extends BaseAPIController {
         } else if (email && verification_code) {
             data = { email: email }
         } else {
-            res.status(ERROR)
-            res.json(successResponse(ERROR, {}, 'Some parameter missing.'));
+            res.status(PARAMETER_MISSING_STATUS).json(parameterMissing())
             return;
         }
-        User.findOne(UserModel, data)
-            .then((user) => {
-                if (!user) {
-                    res.status(ERROR);
-                    res.json(successResponse(ERROR, {}, 'User not found.'));
-                } else {
-                    let updatedData;
-                    if (update) {
-                        updatedData = { is_verify: 1, status: 2 };
-                    } else {
-                        updatedData = { is_verify: 1 };
-                    }
-                    updatedData.access_token = user.get('access_token')
-                    updatedData.verification_code = Number(verification_code)
-                    data.verification_code = Number(verification_code);
-                    UserModel.findOneAndUpdate(data, { $set: updatedData, returnNewDocument: true }, (err, insertData) => {
-                        if (err) {
-                            res.status(ERROR);
-                            res.json(successResponse(ERROR, err, 'Error.'));
-                        } else {
-                            if (insertData) {
-                                res.status(SUCCESS);
-                                res.json(successResponse(SUCCESS, {}, 'OTP match successfully.'));
-                            } else {
-                                res.status(ERROR);
-                                res.json(successResponse(ERROR, {}, 'Invalid verification Code.'));
-                            }
-                        }
-                    });
-                }
-            }).catch((e) => {
-                res.status(ERROR);
-                res.json(successResponse(ERROR, e, 'Error.'));
-            })
+        data.verification_code = Number(verification_code);
+        let updatedData = update ? { is_verify: 1, status: 2 } : { is_verify: 1 };
+        updatedData.verification_code = Number(verification_code)
+        User.update(UserModel, data, updatedData).then((result) => {
+            if (!result) {
+                res.status(PARAMETER_MISSING_STATUS).json(parameterMissing(`${INVALID_MOBILE_EMAIL} or ${INVALID_VERIFICATION_CODE}`));
+            } else {
+                res.status(SUCCESS_STATUS).json(successResult({}, OTP_MATCHED))
+            }
+        }).catch((e) => { res.status(BAD_REQUEST_STATUS).json(serverError(e)); });
     }
 
-
+    /*Controller for forgot password*/
     forgotPassword = (req, res) => {
         let { mobile, email } = req.body;
         const UserModel = req.User;
@@ -276,228 +165,109 @@ export class UserController extends BaseAPIController {
         } else if (email) {
             data = { email: email }
         } else {
-            res.status(ERROR)
-            res.json(successResponse(ERROR, {}, 'Some parameter missing.'));
+            res.status(PARAMETER_MISSING_STATUS).json(parameterMissing())
             return;
         }
-        User.findOne(UserModel, data)
-            .then((user) => {
-                if (!user) {
-                    res.status(ERROR);
-                    res.json(successResponse(ERROR, {}, 'Please enter the registered email or mobile number.'));
-                } else {
-                    let country_code = user.get('country_code');
-                    let verification_code = generateRandomString();
-                    // let verification_code = 123456;
-                    let updatedData = { verification_code: verification_code }
-                    if (mobile) {
-                        twilio.sendMessageTwilio(`Please enter this verification code to verify: ${verification_code}`, country_code + mobile)
-                            .then((result) => {
-                                User.update(UserModel, data, updatedData)
-                                    .then(() => {
-                                        res.status(SUCCESS);
-                                        res.json(successResponse(SUCCESS, '{}', 'An OTP has been sent,please verify.'));
-                                    }).catch((e) => {
-                                        res.status(ERROR);
-                                        res.json(successResponse(ERROR, e, 'Something Went Wrong.'));
-                                    })
-                            }).catch((e) => {
-                                res.status(ERROR);
-                                res.json(successResponse(ERROR, e, 'You have entered a invalid Mobile Number.'));
-                            })
-                    } else {
-                        mail.sendMail(email, constant().nodeMailer.subject, constant().nodeMailer.text, config.nodeMailer_email, constant().nodeMailer.html + verification_code)
-                            .then((response) => {
-                                User.update(UserModel, data, updatedData)
-                                    .then(() => {
-                                        res.status(SUCCESS);
-                                        res.json(successResponse(SUCCESS, '{}', 'An OTP has been sent, Please verify.'));
-                                    }).catch((e) => {
-                                        res.status(ERROR);
-                                        res.json(successResponse(ERROR, e, 'Email not send successfully.'));
-                                    })
-                            })
-                            .catch((e) => {
-                                res.status(ERROR);
-                                res.json(successResponse(ERROR, e, 'Error.'));
-                            });
-                    }
-                }
-            }).catch((e) => {
-                res.status(ERROR);
-                res.json(successResponse(ERROR, e, 'Error.'));
-            })
+        User.findOne(UserModel, data).then((user) => {
+            if (!user) {
+                res.status(PARAMETER_MISSING_STATUS).json(parameterMissing(INVALID_MOBILE_EMAIL));
+            } else {
+                let country_code = user.get('country_code');
+                let verification_code = generateRandomString();
+                let dbql = mobile ? twilio.sendMessageTwilio(VERIFICATION_MESSAGE + verification_code, country_code + mobile) : mail.sendMail(email, constant().nodeMailer.subject, constant().nodeMailer.text, config.nodeMailer_email, constant().nodeMailer.html + verification_code);
+                dbql.then((result) => {
+                    User.update(UserModel, data, { verification_code }).then((result) => {
+                        res.status(SUCCESS_STATUS).json(successResult({}, OTP_SENT))
+                    }).catch((e) => { res.status(BAD_REQUEST_STATUS).json(serverError(e)); });
+                }).catch((e) => { res.status(BAD_REQUEST_STATUS).json(serverError(e)); });
+            }
+        }).catch((e) => { res.status(BAD_REQUEST_STATUS).json(serverError(e)); });
     }
 
+    /*Controller for create Username*/
     createUserName = (req, res) => {
         let { access_token } = req.headers;
         let { user_name } = req.body;
         let UserModel = req.User;
-        if (access_token && user_name) {
+        let validation = validate({ user_name });
+        if (validation.status) {
             User.findOne(UserModel, { user_name: user_name })
                 .then((userDetails) => {
                     if (userDetails) {
-                        res.status(ERROR)
-                        res.json(successResponse(ERROR, {}, 'Username has already exist.'));
+                        res.status(ALREADY_EXIST).json(successResult(USERNAME_EXIST))
                     } else {
-                        UserModel.findOneAndUpdate({ "access_token": access_token }, { $set: { "user_name": user_name, "status": 4 }, returnNewDocument: true }, { new: true }, (err, insertData) => {
-                            let response = { access_token: access_token, status: 4 }
-                            if (err) {
-                                res.status(ERROR);
-                                res.json(successResponse(ERROR, err, 'Error.'));
-                            } else {
-                                if (insertData) {
-                                    if (insertData.get('mobile')) {
-                                        response.mobile = insertData.get('mobile');
-                                    }
-                                    res.status(SUCCESS);
-                                    res.json(successResponse(SUCCESS, response, 'UserName Saved successfully.'));
-                                } else {
-                                    res.status(ERROR);
-                                    res.json(successResponse(ERROR, {}, 'Invalid access token.'));
-                                }
-                            }
-                        });
+                        User.update(UserModel, { access_token }, { user_name, status: 4 })
+                            .then((result) => {
+                                let response = { access_token: access_token, status: 4 }
+                                response.mobile = result && result.get('mobile') || '';
+                                res.status(SUCCESS_STATUS).json(successResult(result))
+                            })
+                            .catch((e) => { res.status(BAD_REQUEST_STATUS).json(serverError(e)) })
                     }
-                }).catch((e) => {
-                    res.status(ERROR);
-                    res.json(successResponse(ERROR, e, 'Error.'));
                 })
+                .catch((e) => { res.status(BAD_REQUEST_STATUS).json(serverError(e)) })
         } else {
-            res.status(ERROR)
-            res.json(successResponse(ERROR, {}, 'Some parameter missing.'));
+            res.status(PARAMETER_MISSING_STATUS).json(parameterMissing(validation.data))
         }
     }
 
+    /*Controller for save personal details*/
     savePersonalDetails = (req, res) => {
         let { access_token } = req.headers;
-        let body = req.body;
-        let user = body.user;
-        if (!user) {
-            res.status(ERROR)
-            res.json(successResponse(ERROR, {}, 'User Details missing.'));
-            return;
-        }
-        let { mobile } = body.user;
+        let user = req.body.user;
         let UserModel = req.User;
-        if (access_token) {
+        if (user) {
+            user = verifyData(user);
             user.status = 5;
-            if (mobile) {
-                User.findOne(UserModel, { mobile: mobile })
-                    .then((userData) => {
-                        if (userData) {
-                            res.status(ERROR);
-                            res.json(successResponse(ERROR, {}, 'Mobile Number already exist.'));
-                        } else {
-                            console.log(user)
-                            UserModel.findOneAndUpdate({ "access_token": access_token }, { $set: user, returnNewDocument: true }, (err, insertData) => {
-                                if (err) {
-                                    res.status(ERROR);
-                                    res.json(successResponse(ERROR, err, 'Error.'));
-                                } else {
-                                    if (insertData) {
-                                        res.status(SUCCESS);
-                                        res.json(successResponse(SUCCESS, { access_token: access_token, status: 5 }, 'UserName Saved successfully.'));
-                                    } else {
-                                        res.status(ERROR);
-                                        res.json(successResponse(ERROR, {}, 'Invalid access token.'));
-                                    }
-                                }
-                            });
-                        }
-                    }).catch((e) => {
-                        res.status(ERROR);
-                        res.json(successResponse(ERROR, e, 'Something Went Wrong.'));
-                    })
-            } else {
-                if (user && user.mobile) {
-                    user = _.omit(user, 'mobile')
-                }
-                UserModel.findOneAndUpdate({ "access_token": access_token }, { $set: user, returnNewDocument: true }, (err, insertData) => {
-                    if (err) {
-                        res.status(ERROR);
-                        res.json(successResponse(ERROR, err, 'Error.'));
+            let { mobile } = user;
+            let dbql = mobile ? User.findOne(UserModel, { mobile: mobile }) : User.update(UserModel, { access_token }, user)
+            dbql.then((result) => {
+                if (mobile) {
+                    if (result) {
+                        res.status(ALREADY_EXIST).json(parameterMissing({ mobile: MOBILE_NUMBER_MESSAGE }));
                     } else {
-                        if (insertData) {
-                            res.status(SUCCESS);
-                            res.json(successResponse(SUCCESS, { access_token: access_token, status: 5 }, 'UserName Saved successfully.'));
-                        } else {
-                            res.status(ERROR);
-                            res.json(successResponse(ERROR, {}, 'Invalid access token.'));
-                        }
+                        User.update(UserModel, { access_token }, user).then((insertData) => {
+                            res.status(SUCCESS_STATUS).json(successResult({ access_token, status: 5 }))
+                        }).catch((e) => { res.status(BAD_REQUEST_STATUS).json(serverError(e)) });
                     }
-                });
-            }
+                } else {
+                    res.status(SUCCESS_STATUS).json(successResult({ access_token, status: 5 }))
+                }
+            }).catch((e) => { res.status(BAD_REQUEST_STATUS).json(serverError(e)) });
         } else {
-            res.status(ERROR);
-            res.json(successResponse(ERROR, {}, 'Access token missing.'));
+            res.status(PARAMETER_MISSING_STATUS).json(parameterMissing());
         }
     }
 
+    /*Controller for get intresting topics*/
     intrestingTopics = (req, res) => {
-        req.Intresting_topics.findOne({}, (err, topic) => {
-            if (err) {
-                res.status(ERROR);
-                res.json(successResponse(ERROR, err, 'Error.'));
-            } else {
-                res.status(SUCCESS);
-                res.json(successResponse(SUCCESS, topic.get('interests'), 'List of topics.'));
-            }
-        })
+        Topics.findOne(req.Intresting_topics, {}).then((topic) => {
+            res.status(SUCCESS_STATUS).json(successResult(topic.get('interests')))
+        }).catch((e) => { res.status(BAD_REQUEST_STATUS).json(serverError(e)) });
     }
 
+
+    /*Controller for save intreset*/
     saveInterest = (req, res) => {
         let { access_token } = req.headers;
         let { list } = req.body;
-        if (!list && !Array.isArray(list)) {
-            list = [];
-        }
         let UserModel = req.User;
-        if (access_token) {
-            UserModel.findOneAndUpdate({ "access_token": access_token }, { $set: { user_interest: list, status: 6 }, returnNewDocument: true }, { new: true }, (err, insertData) => {
-                if (err) {
-                    res.status(ERROR);
-                    res.json(successResponse(ERROR, err, 'Error.'));
-                } else {
-                    if (insertData) {
-                        res.status(SUCCESS);
-                        res.json(successResponse(SUCCESS, insertData, 'User interest Saved successfully.'));
-                    } else {
-                        res.status(ERROR);
-                        res.json(successResponse(ERROR, {}, 'Invalid access token.'));
-                    }
-                }
-            });
-        } else {
-            res.status(ERROR);
-            res.json(successResponse(ERROR, {}, 'access token missing.'));
-        }
+        list = (!list && !Array.isArray(list)) ? list = [] : list;
+        User.update(UserModel, { access_token }, { user_interest: list, status: 6 }).then((insertData) => {
+            res.status(SUCCESS_STATUS).json(successResult(insertData))
+        }).catch((e) => { res.status(BAD_REQUEST_STATUS).json(serverError(e)) });
     }
 
+    /*Controller for logout*/
     logout = (req, res) => {
         let { access_token } = req.headers;
         let UserModel = req.User;
-        if (access_token) {
-            UserModel.findOneAndUpdate({ "access_token": access_token }, { $set: { access_token: "" }, returnNewDocument: true }, (err, insertData) => {
-                if (err) {
-                    res.status(ERROR);
-                    res.json(successResponse(ERROR, err, 'Error.'));
-                } else {
-                    if (insertData) {
-                        res.status(SUCCESS);
-                        res.json(successResponse(SUCCESS, {}, 'User logout successfully.'));
-                    } else {
-                        res.status(ERROR);
-                        res.json(successResponse(ERROR, {}, 'Invalid access token.'));
-                    }
-                }
-            });
-        } else {
-            res.status(ERROR);
-            res.json(successResponse(ERROR, {}, 'Access token missing.'));
-        }
+        User.update(UserModel, { access_token }, { access_token: '' }).then((insertData) => {
+            res.status(SUCCESS_STATUS).json(successResult({}, USER_LOGOUT_MESSAGE))
+        }).catch((e) => { res.status(BAD_REQUEST_STATUS).json(serverError(e)) });
     }
 
+    /*Controller for reset password*/
     resetPassword = (req, res) => {
         let UserModel = req.User;
         let data;
@@ -507,78 +277,43 @@ export class UserController extends BaseAPIController {
         } else if (email && password) {
             data = { email: email }
         } else {
-            res.status(ERROR)
-            res.json(successResponse(ERROR, {}, 'Some parameter missing.'));
+            res.status(PARAMETER_MISSING_STATUS).json(parameterMissing())
             return;
         }
-        var md5 = crypto.createHash('md5');
-        md5.update(password);
-        var pass_md5 = md5.digest('hex');
-
         if (data) {
-            UserModel.findOneAndUpdate(data, { $set: { password: pass_md5 }, returnNewDocument: true }, (err, insertData) => {
-                if (err) {
-                    res.status(ERROR);
-                    res.json(successResponse(ERROR, err, 'Error.'));
+            User.update(UserModel, data, { password: encodePassword(password) }).then((insertData) => {
+                if (insertData) {
+                    res.status(SUCCESS_STATUS).json(successResult({}, PASSWORD_CHANGE_MESSAGE))
                 } else {
-                    if (insertData) {
-                        res.status(SUCCESS);
-                        res.json(successResponse(SUCCESS, {}, 'Password changed successfully.'));
-                    } else {
-                        res.status(ERROR);
-                        res.json(successResponse(ERROR, {}, 'Invalid access token.'));
-                    }
+                    res.status(PARAMETER_MISSING_STATUS).json(parameterMissing(INVALID_MOBILE_EMAIL))
                 }
-            });
-        } else {
-            res.status(ERROR);
-            res.json(successResponse(ERROR, {}, 'Access token missing.'));
+            }).catch((e) => { res.status(BAD_REQUEST_STATUS).json(serverError(e)) });
         }
     }
 
+    /*Controller for get other user profile*/
     getOtherUsers = (req, res) => {
         let UserModel = req.User;
         let { list } = req.body;
-        let { access_token } = req.headers;
         let follow = [];
         let invite = [];
         let userFollow = [];
         let userFollowId = '';
+        userFollowId = result.get('_id');
+        userFollow = result.get('follow') || "";
         if (Array.isArray(list)) {
-            if (access_token) {
-                UserModel.findOne({ access_token: access_token }, { "follow": 1 }, (err, result) => {
-                    if (err) {
-                        res.status(ERROR);
-                        res.json(successResponse(ERROR, err, 'Error.'));
-                    } else if (result) {
-                        userFollowId = result.get('_id');
-                        userFollow = result.get('follow') || "";
-                        async.eachSeries(list, processData, function(err) {
-                            if (err) {
-                                res.status(ERROR);
-                                res.json(successResponse(ERROR, err, 'Error.'));
-                            } else {
-                                res.status(SUCCESS);
-                                res.json(successResponse(SUCCESS, { follow: follow, invite: invite }, 'Get follow and invite saved successfully.'));
-                            }
-                        })
-                    } else {
-                        res.status(ERROR);
-                        res.json(successResponse(ERROR, {}, 'Invalid access token.'));
-                    }
-                })
-
-            } else {
-                res.status(ERROR);
-                res.json(successResponse(ERROR, {}, 'Access token missing.'));
-            }
-
+            async.eachSeries(list, processData, function(err) {
+                if (err) {
+                    res.status(BAD_REQUEST_STATUS).json(serverError(err));
+                } else {
+                    res.status(SUCCESS_STATUS).json(successResult({ follow, invite }));
+                }
+            })
         } else {
-            res.status(ERROR);
-            res.json(successResponse(ERROR, {}, 'Invalid Array.'));
+            res.status(PARAMETER_MISSING_STATUS).json(parameterMissing(INVALID_ARRAY));
         }
 
-        function processData(val, callback) {
+        function processData(val = [], callback) {
             let result = [];
             let where = {};
             if (val && val.mobile && val.email && val.fb_id) {
@@ -634,55 +369,32 @@ export class UserController extends BaseAPIController {
         }
     }
 
+    /*Controller for change mobile*/
     changeMobile = (req, res) => {
         let { access_token } = req.headers;
         let { mobile, country_code } = req.body;
         let UserModel = req.User;
-        if (access_token && mobile && country_code) {
-            User.findOne(UserModel, { access_token: access_token })
-                .then((user) => {
-                    if (user) {
-                        User.findOne(UserModel, { mobile: mobile })
-                            .then((mobileData) => {
-                                if (mobileData) {
-                                    res.status(ERROR);
-                                    res.json(successResponse(ERROR, {}, 'Mobile number already exist.'));
-                                } else {
-                                    country_code = countryCode(country_code);
-                                    let verification_code = generateRandomString();
-                                    let updatedData = { verification_code: verification_code }
-                                    updatedData.mobile = mobile;
-                                    updatedData.country_code = country_code;
-                                    twilio.sendMessageTwilio(`Please enter this verification code to verify: ${verification_code}`, country_code + mobile)
-                                        .then((result) => {
-                                            User.update(UserModel, { access_token: access_token }, updatedData)
-                                                .then((data) => {
-                                                    res.status(SUCCESS)
-                                                    res.json(successResponse(SUCCESS, { access_token: access_token }, 'An OTP has been sent, please verify.'));
-                                                }).catch((e) => {
-                                                    res.status(ERROR);
-                                                    res.json(successResponse(ERROR, e, "Something went wrong."));
-                                                })
-                                        }).catch((e) => {
-                                            res.status(ERROR);
-                                            res.json(successResponse(ERROR, e, 'You have entered a invalid mobile number.'));
-                                        })
-                                }
-                            }).catch((e) => {
-                                res.status(ERROR);
-                                res.json(successResponse(ERROR, {}, 'Something went wrong'));
-                            })
-                    } else {
-                        res.status(ERROR);
-                        res.json(successResponse(ERROR, {}, 'Invalid access token.'));
-                    }
-                }).catch((e) => {
-                    res.status(ERROR);
-                    res.json(successResponse(ERROR, {}, 'Something went wrong'));
-                })
+        let data = validate({ mobile, country_code });
+        if (data.status) {
+            User.findOne(UserModel, { mobile }).then((mobileData) => {
+                if (mobileData) {
+                    res.status(ALREADY_EXIST).json(parameterMissing(MOBILE_NUMBER_MESSAGE));
+                } else {
+                    country_code = countryCode(country_code);
+                    let verification_code = generateRandomString();
+                    data = data.data;
+                    data.country_code = country_code;
+                    data.verification_code = verification_code;
+                    twilio.sendMessageTwilio(VERIFICATION_MESSAGE + verification_code, country_code + mobile)
+                        .then((result) => {
+                            User.update(UserModel, { access_token }, data).then((result) => {
+                                res.status(SUCCESS_STATUS).json(successResult({ access_token }, OTP_SENT))
+                            }).catch((e) => { res.status(BAD_REQUEST_STATUS).json(serverError(e)); });
+                        }).catch((e) => { res.status(BAD_REQUEST_STATUS).json(serverError(e)); });
+                }
+            }).catch((e) => { res.status(BAD_REQUEST_STATUS).json(serverError(e)); });
         } else {
-            res.status(ERROR);
-            res.json(successResponse(ERROR, {}, 'Some parameter missing.'));
+            res.status(PARAMETER_MISSING_STATUS).json(parameterMissing(data.data));
         }
     }
 

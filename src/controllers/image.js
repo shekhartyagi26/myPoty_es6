@@ -1,6 +1,7 @@
 import BaseAPIController from "./BaseAPIController";
 import { successResponse, serverError } from "../modules/generic";
 import { SUCCESS, ERROR } from "../modules/constant";
+import { PROFILE_IMAGE_FORMAT } from "../modules/image";
 var fs = require('fs')
 import mime from "mime";
 
@@ -14,8 +15,7 @@ export class ImageController extends BaseAPIController {
             let data = { "access_token": access_token };
             let actualPath = req.file.path;
             req.file.path = req.file.path.replace('uploads/', "");
-            let typeOf = mime.lookup(actualPath);
-            req.file.profile_picture_format = typeOf.includes('video') ? 1 : typeOf.includes('image') ? 2 : 0;
+            req.file.profile_picture_format = PROFILE_IMAGE_FORMAT(req.file.filename);
             UserModel.findOneAndUpdate(data, { $set: { profile_picture: req.file, status: 3 }, returnNewDocument: true, upsert: true }, (err, insertData) => {
                 if (err) {
                     fs.unlink(actualPath, function() {

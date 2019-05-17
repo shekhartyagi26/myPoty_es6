@@ -1,5 +1,6 @@
 import _ from 'lodash';
 import { BAD_REQUEST_MESSAGE, SUCCESS_MESSAGE, INVALID_ACCESS_TOKEN_MESSAGE, PARAMETER_MISSING_MESSAGE } from '../constant/message';
+import crypto from 'crypto';
 
 const generateResponse = ({ status, message = null, description = null, data = {} }) => {
     return {
@@ -24,7 +25,7 @@ const notFoundError = (e) => {
     return generateResponse({ status: 404, message: e })
 };
 
-const serverError = (message = BAD_REQUEST_MESSAGE, response = {}) => {
+const serverError = (response = {}, message = BAD_REQUEST_MESSAGE) => {
     return ({
         response,
         message
@@ -93,6 +94,7 @@ const parameterMissing = (message = PARAMETER_MISSING_MESSAGE, response = {}) =>
     })
 };
 
+// verify the key's and return only those key's which have value
 const verifyData = (data = {}) => {
     var result = {};
     var count = 0;
@@ -104,6 +106,7 @@ const verifyData = (data = {}) => {
     return result;
 }
 
+// validate the key's and return the missing keys otherwise return the valid json
 const validate = (data = {}) => {
     var result = {};
     var resp = {};
@@ -113,6 +116,7 @@ const validate = (data = {}) => {
             result[key] = val;
         } else {
             resp[key] = `${key} is missing`;
+            // resp.push(`${key} is missing`);
         }
     })
     if (resp && _.size(resp)) {
@@ -120,6 +124,13 @@ const validate = (data = {}) => {
     } else {
         return { status: true, data: result };
     }
+}
+
+const encodePassword = (password = '') => {
+    let md5 = crypto.createHash('md5');
+    md5.update(password);
+    let pass_md5 = md5.digest('hex');
+    return pass_md5;
 }
 
 module.exports = {
@@ -137,5 +148,6 @@ module.exports = {
     invalidToken,
     parameterMissing,
     verifyData,
-    validate
+    validate,
+    encodePassword
 };

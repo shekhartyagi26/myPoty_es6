@@ -1,9 +1,10 @@
+import { BAD_REQUEST_STATUS, SUCCESS_STATUS } from '../constant/status';
+import { PROFILE_IMAGE_FORMAT, DELETE_IMAGE } from "../modules/image";
+import { successResult, verifyData,serverError } from "../modules/generic";
 import BaseAPIController from "./BaseAPIController";
-import { successResult, verifyData } from "../modules/generic";
 import User from "../models/User.js";
 import fs from 'fs';
 import mime from "mime";
-import { BAD_REQUEST_STATUS, SUCCESS_STATUS } from '../constant/status';
 
 
 export class profileController extends BaseAPIController {
@@ -33,17 +34,15 @@ export class profileController extends BaseAPIController {
         if (req.file) {
             actualPath = req.file.path;
             req.file.path = req.file.path.replace('uploads/', "");
-            let typeOf = mime.lookup(actualPath);
-            req.file.profile_picture_format = typeOf.includes('video') ? 1 : typeOf.includes('image') ? 2 : 0;
+            req.file.profile_picture_format = PROFILE_IMAGE_FORMAT(actualPath)
             updatedDate.profile_picture = req.file;
         }
 
         User.update(req.User, checkData, updatedDate).then((result) => {
             res.status(SUCCESS_STATUS).json(successResult(result))
         }).catch((e) => {
-            fs.unlink(actualPath, function() {
-                res.status(BAD_REQUEST_STATUS).json(serverError(e));
-            })
+            DELETE_IMAGE(actualPath);
+            res.status(BAD_REQUEST_STATUS).json(serverError(e));
         })
     }
 }

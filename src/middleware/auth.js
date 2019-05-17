@@ -1,15 +1,12 @@
 import { BAD_REQUEST_STATUS, INVALID_ACCESS_TOKEN_STATUS, PARAMETER_MISSING_STATUS } from '../constant/status';
 import { successResult, serverError, invalidToken, parameterMissing } from "../modules/generic";
+import { ACCESS_TOKEN_MISSING } from '../constant/message';
 
 export class AuthController {
 
     // middleware for logged in users
     requiresLogin(req, res, next) {
-        console.log('=================')
-        console.log(req.headers)
-        console.log('=================')
         let { access_token } = req.headers;
-
         if (access_token) {
             req.User.findOne({ access_token }, (error, user) => {
                 if (error) {
@@ -22,7 +19,7 @@ export class AuthController {
                 }
             })
         } else {
-            next(res.status(PARAMETER_MISSING_STATUS).json(parameterMissing()));
+            next(res.status(PARAMETER_MISSING_STATUS).json(parameterMissing(ACCESS_TOKEN_MISSING)));
         }
     }
 }
